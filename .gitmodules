@@ -1,0 +1,8 @@
+[submodule "3rd/SDL3"]
+	path = 3rd/SDL3
+	url = git@github.com:libsdl-org/SDL.git
+	shallow = true
+[submodule "3rd/stb"]
+	path = 3rd/stb
+	url = git@github.com:nothings/stb.git
+    shallow = true
