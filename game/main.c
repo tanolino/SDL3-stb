@@ -11,10 +11,10 @@ static bool do_run = true;
 static const char* MODULE_NAME = "SDL3";
 
 // For now we put this here, move somewhere else later
-static const char* FONT_FILE_PATH = "Z:\\Dev\\SDL3-stb\\resources\\fonts\\Unitblock-JpJma.ttf";
+static const char* FONT_FILE_PATH = "../../resources/fonts/Unitblock-JpJma.ttf";
 static SDL_Texture* text_texture = NULL;
 
-static const char* IMG1_FILE_PATH = "C:\\Users\\Nathanael\\Pictures\\DSW7_cottage_pic_uSI9MgL.png";
+static const char* IMG1_FILE_PATH = "test.png";
 static files_memory_buffer img1_membuffer = { 0 };
 static SDL_Texture* img1_texture = NULL;
 
