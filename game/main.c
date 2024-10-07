@@ -11,22 +11,10 @@ static bool do_run = true;
 static const char* MODULE_NAME = "SDL3";
 
 // For now we put this here, move somewhere else later
-static const char* FONT_FILE_PATH = "../../resources/fonts/Unitblock-JpJma.ttf";
 static SDL_Texture* text_texture = NULL;
 
-static const char* IMG1_FILE_PATH = "test.png";
-static files_memory_buffer img1_membuffer = { 0 };
+#include "../resources/resources_jpg.h"
 static SDL_Texture* img1_texture = NULL;
-
-static SDL_Thread* thread = NULL;
-static bool thread_finished = false;
-
-int run_in_thread(void* ptr)
-{
-    img1_membuffer = files_read_file((const char*)ptr);
-    thread_finished = true;
-    return 0;
-}
 
 SDL_AppResult print_sdl_error(const char* module, const char* function)
 {
@@ -53,12 +41,11 @@ SDL_AppResult SDLCALL SDL_AppInit(void** appstate, int argc, char** argv)
     if (!global_renderer)
         return print_sdl_error(MODULE_NAME, "SDL_CreateRenderer(...)");
 
-    text_init_with_file(FONT_FILE_PATH);
-    text_texture = text_render(IMG1_FILE_PATH);
+    text_init();
+    text_texture = text_render_with_border("Ein Bild von mir, um kein Copyright zu verletzen.", 10);
+    img1_texture = image_load_from_memory(jpg_jpg, jpg_jpg_len);
 
     SDL_Color color_black = { .r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE };
-
-    thread = SDL_CreateThread(run_in_thread, "OffloadImageLoad", (void*)IMG1_FILE_PATH);
 
     return SDL_APP_CONTINUE;
 }
@@ -90,42 +77,20 @@ SDL_AppResult SDLCALL SDL_AppIterate(void* appstate)
                 .y = (600.f - iH) / 2.f,
                 .w = iW, .h = iH
             };
-            float border = 5.f;
-            SDL_FRect frame = {
-                .x = rect.x - border,
-                .y = rect.y - border,
-                .w = rect.w + 2 * border,
-                .h = rect.h + 2 * border
-            };
-            SDL_RenderFillRect(global_renderer, &frame);
-            SDL_SetTextureColorMod(text_texture, (SDL_GetTicks() / 4)% 0xff, 0, 0);
+            int val = (SDL_GetTicks() / 4) % (0x1FE);
+            if (val > 0xFF)
+                val = 0x1FE - val;
+            SDL_SetTextureColorMod(text_texture, (Uint8)val, 0, (Uint8)(0xFF - val));
             SDL_RenderTexture(global_renderer, text_texture, NULL, &rect);
         }
     }
     SDL_RenderPresent(global_renderer);
-
-    if (thread_finished)
-    {
-        int ret;
-        SDL_WaitThread(thread, &ret);
-        thread = NULL;
-        thread_finished = false;
-
-        img1_texture = image_load_from_memory(img1_membuffer.data, img1_membuffer.len);
-        files_free_memory_buffer(&img1_membuffer);
-    }
 
     return SDL_APP_CONTINUE;
 }
 
 void SDLCALL SDL_AppQuit(void* appstate, SDL_AppResult result)
 {
-    if (thread)
-    {
-        int ret;
-        SDL_WaitThread(thread, &ret);
-    }
-
     if (img1_texture)
         SDL_DestroyTexture(img1_texture);
 

@@ -9,6 +9,8 @@ static const char* MODULE_NAME = "text";
 static stbtt_fontinfo font_info;
 static files_memory_buffer font_mem_buffer = { 0 };
 
+#include "../resources/resources_font.h"
+
 static void text_init_with_memory_internal()
 {
     int font_id = stbtt_InitFont(
@@ -34,9 +36,85 @@ void text_init_with_memory(const char* data, long int size)
     }
 }
 
+void text_init()
+{
+    text_init_with_memory(fonts_Unitblock_JpJma_ttf, fonts_Unitblock_JpJma_ttf_len);
+}
+
 void text_quit()
 {
     files_free_memory_buffer(&font_mem_buffer);
+}
+
+static int get_text_width(const char* text)
+{
+    int advanceWidth, leftSideBearing;
+    int full_width = 0;
+    while (*text)
+    {
+        stbtt_GetCodepointHMetrics(&font_info, *text++, &advanceWidth, &leftSideBearing);
+        full_width += advanceWidth + leftSideBearing;
+    }
+    return full_width;
+}
+
+struct text_measure
+{
+    int width;
+    int height;
+    int ascent;
+    float scale;
+};
+typedef struct text_measure text_measure;
+
+static text_measure take_measure(const char* text)
+{
+    int ascent, descent, line_gap;
+    stbtt_GetFontVMetrics(&font_info, &ascent, &descent, &line_gap);
+
+    float scale = stbtt_ScaleForPixelHeight(&font_info, 30.f);
+    text_measure result = {
+        .scale = scale,
+        .width = (int)ceilf((float)get_text_width(text) * scale),
+        .height = (int)ceilf((float)(ascent - descent) * scale),
+        .ascent = (int)ceilf((float)ascent * scale)
+    };
+    return result;
+}
+
+static SDL_Texture* raw_data_into_texture(int width, int height, unsigned char* data)
+{
+    SDL_Surface* sdl_surface = SDL_CreateSurfaceFrom(width, height, SDL_PIXELFORMAT_RGBA32, (void*)data, width * 4);
+    if (!sdl_surface)
+    {
+        printf("Failed to SDL_CreateSurfaceFrom");
+        return NULL;
+    }
+    SDL_Texture* sdl_texture = SDL_CreateTextureFromSurface(global_renderer, sdl_surface);
+    SDL_DestroySurface(sdl_surface);
+    if (!sdl_texture)
+        printf("Failed to SDL_CreateTextureFromSurface(...)");
+    return sdl_texture;
+}
+
+static void write_text_into_8bit_buffer(const text_measure* measure, unsigned char* data, const char* text)
+{
+    int written_offset = 0;
+    while (*text)
+    {
+        int cp = (int)(*text++);
+        int x0, x1, y0, y1;
+        int offset = (int)floorf(written_offset * measure->scale);
+        stbtt_GetCodepointBitmapBox(&font_info, cp, measure->scale, measure->scale, &x0, &y0, &x1, &y1);
+
+        int top_buffer = measure->ascent + y0;
+        stbtt_MakeCodepointBitmap(&font_info, data + offset + (top_buffer * measure->width),
+            x1 - x0, y1 - y0, measure->width,
+            measure->scale, measure->scale, cp);
+        int advanceWidth, leftSideBearing;
+        stbtt_GetCodepointHMetrics(&font_info, cp, &advanceWidth, &leftSideBearing);
+        written_offset += advanceWidth + leftSideBearing;
+    }
 }
 
 SDL_Texture* text_render(const char* text)
@@ -44,65 +122,82 @@ SDL_Texture* text_render(const char* text)
     if (!text || !text[0] || !font_mem_buffer.data)
         return NULL;
 
-    float scale = stbtt_ScaleForPixelHeight(&font_info, 30.f);
-    int advanceWidth, leftSideBearing;
-    const char* ptr = text;
-    int full_width = 0;
-    while (*ptr)
-    {
-        stbtt_GetCodepointHMetrics(&font_info, *ptr++, &advanceWidth, &leftSideBearing);
-        full_width += advanceWidth + leftSideBearing;
-    }
-    int ascent, descent, line_gap;
-    stbtt_GetFontVMetrics(&font_info, &ascent, &descent, &line_gap);
-    int full_height = (ascent - descent) * scale;
-    full_width *= scale;
-    ascent *= scale;
+    text_measure measure = take_measure(text);
 
-    unsigned char* raw_data = calloc(
-        4 * full_width * full_height, sizeof(unsigned char));
+    unsigned char* raw_data = calloc(4 * measure.width * measure.height, sizeof(unsigned char));
     if (!raw_data)
     {
         printf("Out of memory during text_render(...)");
         return NULL;
     }
 
-    ptr = text;
-    raw_data;
-    int written_offset = 0;
-    while (*ptr)
-    {
-        int cp = (int)(*ptr++);
-        int x0, x1, y0, y1;
-        stbtt_GetCodepointBitmapBox(&font_info, cp, scale, scale, &x0, &y0, &x1, &y1);
-        int top_buffer = ascent + y0;
-        stbtt_MakeCodepointBitmap(&font_info, raw_data + (int)(written_offset*scale) + (top_buffer * full_width),
-            x1 - x0, y1 - y0, full_width,
-            scale, scale, cp);
-        stbtt_GetCodepointHMetrics(&font_info, cp, &advanceWidth, &leftSideBearing);
-        written_offset += advanceWidth + leftSideBearing;
-    }
+    write_text_into_8bit_buffer(&measure, raw_data, text);
 
     // We have to unroll 8 to 32 bit, start from the rear
-    for (long int i = (full_width * full_height) - 1; i >= 0; --i)
+    for (long int i = (measure.width * measure.height) - 1; i >= 0; --i)
     {
-        raw_data[4 * i + 3] = raw_data[i];
-        raw_data[4 * i + 2] = 0xff;
-        raw_data[4 * i + 1] = 0xff;
-        raw_data[4 * i + 0] = 0xff;
+        raw_data[4 * i + 3] = raw_data[i]; // Alpha
+        raw_data[4 * i + 2] = 0xFF; // B
+        raw_data[4 * i + 1] = 0xFF; // G
+        raw_data[4 * i + 0] = 0xFF; // R
     }
 
-    SDL_Surface* sdl_surface = SDL_CreateSurfaceFrom(full_width, full_height, SDL_PIXELFORMAT_RGBA32, (void*)raw_data, full_width * 4);
-    if (!sdl_surface)
+    SDL_Texture* result = raw_data_into_texture(measure.width, measure.height, raw_data);
+    free(raw_data);
+    return result;
+}
+
+SDL_Texture* text_render_with_border(const char* text, int black_border)
+{
+    if (!text || !text[0] || !font_mem_buffer.data)
+        return NULL;
+
+    text_measure measure = take_measure(text);
+
+    int buff_width = measure.width + black_border + black_border;
+    int buff_height = measure.height + black_border + black_border;
+    int buff_size_8bit = measure.width * measure.height;
+    int buff_size_32bit = buff_width * buff_height * 4; // 4 = RGBA
+    unsigned char* raw1 = calloc(buff_size_8bit + buff_size_32bit, sizeof(unsigned char));
+    if (!raw1)
     {
-        free(raw_data);
-        printf("Failed to SDL_CreateSurfaceFrom");
+        printf("Out of memory during text_render(...)");
         return NULL;
     }
-    SDL_Texture* sdl_texture = SDL_CreateTextureFromSurface(global_renderer, sdl_surface);
-    SDL_DestroySurface(sdl_surface);
-    free(raw_data);
-    if (!sdl_texture)
-        printf("Failed to SDL_CreateTextureFromSurface(...)");
-    return sdl_texture;
+
+    // we use the memory like [ ... ... 32 bit image ... ... | .. 8 bit image ..]
+    unsigned char* raw2 = raw1 + buff_size_32bit;
+    write_text_into_8bit_buffer(&measure, raw2, text);
+
+    // We have to unroll 8 to 32 bit,
+    // map [measure.width, measure.height] to [buff_width, buff_height]
+    // calloc sets everything 0, which is nice
+    for (int y = 0; y < measure.height; ++y)
+    {
+        for (int x = 0; x < measure.width; ++x)
+        {
+            unsigned char val = raw2[y * measure.width + x];
+
+            int y_raw1 = buff_width * (y + black_border);
+            int x_raw1 = x + black_border;
+            unsigned char* ptr = raw1 + (4 * (y_raw1 + x_raw1));
+            ptr[0] = val; // R
+            ptr[1] = val; // G
+            ptr[2] = val; // B
+            // ptr[3] = val; // Alpha
+            for (int y2 = -black_border+1; y2 < black_border-1; ++y2)
+            {
+                int left = black_border - abs(y2);
+                for (int x2 = -left; x2 < left; ++x2)
+                {
+                    unsigned char* ptr2 = ptr + (4 * (y2*buff_width + x2));
+                    ptr2[3] = max(ptr2[3], val);
+                }
+            }
+        }
+    }
+
+    SDL_Texture* result = raw_data_into_texture(buff_width, buff_height, raw1);
+    free(raw1);
+    return result;
 }
