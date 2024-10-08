@@ -4,6 +4,7 @@
 #include "files.h"
 #include "image.h"
 #include "text.h"
+#include "zlib.h"
 
 SDL_Window* global_window = NULL;
 SDL_Renderer* global_renderer = NULL;
@@ -14,6 +15,7 @@ static const char* MODULE_NAME = "SDL3";
 static SDL_Texture* text_texture = NULL;
 
 #include "../resources/resources_jpg.h"
+#include "../resources/resources_jpg_gz.h"
 static SDL_Texture* img1_texture = NULL;
 
 SDL_AppResult print_sdl_error(const char* module, const char* function)
@@ -43,7 +45,26 @@ SDL_AppResult SDLCALL SDL_AppInit(void** appstate, int argc, char** argv)
 
     text_init();
     text_texture = text_render_with_border("Ein Bild von mir, um kein Copyright zu verletzen.", 10);
-    img1_texture = image_load_from_memory(jpg_jpg, jpg_jpg_len);
+
+    // jpg_jpg_gz, jpg_jpg_gz_len);
+    unsigned char* out_buffer = malloc(jpg_jpg_len * sizeof(char));
+    z_stream stream = { 0 };
+    if (inflateInit2(&stream, 32 + MAX_WBITS) != Z_OK) {
+        printf("inflateInit2(...) failed\n"); exit(1);
+    }
+    stream.avail_in = jpg_jpg_gz_len;
+    stream.next_in = (Bytef*)jpg_jpg_gz;
+    stream.avail_out = jpg_jpg_len;
+    stream.next_out = (Bytef*)out_buffer;
+    int res = inflate(&stream, Z_NO_FLUSH);
+    if (res != Z_STREAM_END) {
+        printf("inflate(..) failed with %d .\n", res); exit(1);
+    }
+    inflateEnd(&stream);
+
+    //img1_texture = image_load_from_memory((const char*)jpg_jpg, jpg_jpg_len);
+    img1_texture = image_load_from_memory((const char*)out_buffer, jpg_jpg_len);
+    free(out_buffer);
 
     SDL_Color color_black = { .r = 0, .g = 0, .b = 0, .a = SDL_ALPHA_OPAQUE };
 

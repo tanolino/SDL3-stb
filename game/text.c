@@ -1,6 +1,7 @@
 #include "text.h"
 #include "files.h"
 #include "main.h"
+#include "zlib.h"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include <stb_truetype.h>
@@ -10,6 +11,7 @@ static stbtt_fontinfo font_info;
 static files_memory_buffer font_mem_buffer = { 0 };
 
 #include "../resources/resources_font.h"
+#include "../resources/resources_font_gz.h"
 
 static void text_init_with_memory_internal()
 {
@@ -38,7 +40,22 @@ void text_init_with_memory(const char* data, long int size)
 
 void text_init()
 {
-    text_init_with_memory(fonts_Unitblock_JpJma_ttf, fonts_Unitblock_JpJma_ttf_len);
+    unsigned char* out_buffer = malloc(fonts_Unitblock_JpJma_ttf_len * sizeof(char));
+    z_stream stream = { 0 };
+    if (inflateInit2(&stream, 32 + MAX_WBITS) != Z_OK) {
+        printf("inflateInit2(...) failed\n"); exit(1);
+    }
+    stream.avail_in = Unitblock_JpJma_ttf_gz_len;
+    stream.next_in = (Bytef*)Unitblock_JpJma_ttf_gz;
+    stream.avail_out = fonts_Unitblock_JpJma_ttf_len;
+    stream.next_out = (Bytef*)out_buffer;
+    int res = inflate(&stream, Z_NO_FLUSH);
+    if (res != Z_STREAM_END) {
+        printf("inflate(..) failed with %d .\n", res); exit(1);
+    }
+    inflateEnd(&stream);
+    text_init_with_memory(out_buffer, fonts_Unitblock_JpJma_ttf_len);
+    // text_init_with_memory((const unsigned char*)fonts_Unitblock_JpJma_ttf, fonts_Unitblock_JpJma_ttf_len);
 }
 
 void text_quit()
@@ -147,6 +164,11 @@ SDL_Texture* text_render(const char* text)
     return result;
 }
 
+unsigned char max_uc(unsigned char a, unsigned char b)
+{
+    return a > b ? a : b;
+}
+
 SDL_Texture* text_render_with_border(const char* text, int black_border)
 {
     if (!text || !text[0] || !font_mem_buffer.data)
@@ -191,7 +213,7 @@ SDL_Texture* text_render_with_border(const char* text, int black_border)
                 for (int x2 = -left; x2 < left; ++x2)
                 {
                     unsigned char* ptr2 = ptr + (4 * (y2*buff_width + x2));
-                    ptr2[3] = max(ptr2[3], val);
+                    ptr2[3] = max_uc(ptr2[3], val);
                 }
             }
         }

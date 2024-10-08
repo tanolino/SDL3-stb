@@ -5,4 +5,8 @@
 [submodule "3rd/stb"]
 	path = 3rd/stb
 	url = git@github.com:nothings/stb.git
-    shallow = true
+	shallow = true
+[submodule "3rd/zlib"]
+	path = 3rd/zlib
+	url = git@github.com:madler/zlib.git
+	shallow = true

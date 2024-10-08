@@ -15,3 +15,9 @@ add_subdirectory("SDL3")
 
 # stb
 set(STB_HEADER_DIR "${CMAKE_CURRENT_LIST_DIR}/stb" CACHE PATH "")
+
+set(SKIP_INSTALL_LIBRARIES ON)
+# zlib
+set(ZLIB_BUILD_EXAMPLES OFF)
+add_subdirectory("zlib")
+set(SKIP_INSTALL_LIBRARIES OFF)

@@ -17,6 +17,8 @@ endif()
 target_link_libraries(${GAME_NAME} PRIVATE SDL3::SDL3-static)
 target_include_directories(${GAME_NAME} PRIVATE "${STB_HEADER_DIR}")
 
+target_link_libraries(${GAME_NAME} PRIVATE zlibstatic)
+
 set_property(TARGET ${GAME_NAME} PROPERTY C_STANDARD 11)
 set_property(TARGET ${GAME_NAME} PROPERTY C_STANDARD_REQUIRED ON)
 set_property(TARGET ${GAME_NAME} PROPERTY C_EXTENSIONS OFF)
